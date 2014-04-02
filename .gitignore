@@ -4,3 +4,4 @@ vendor
 /.project
 /.buildpath
 /.settings/
+certs/
