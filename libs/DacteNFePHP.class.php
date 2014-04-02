@@ -134,6 +134,7 @@ class DacteNFePHP extends CommonNFePHP implements DocumentoNFePHP
     protected $Comp;
     protected $infNF;
     protected $infNFe;
+    protected $printedNfs = 0;
     protected $compl;
     protected $ICMS;
     protected $imp;
@@ -574,6 +575,25 @@ class DacteNFePHP extends CommonNFePHP implements DocumentoNFePHP
         {
             $this->rodapeDACTE($xInic, $this->hPrint + 2.3);
         }
+        
+        $qtyNfs = $this->infNF->length + $this->infNFe->length;
+        if ($qtyNfs > 8) {
+            $this->pdf->AddPage($this->orientacao, $this->papel);
+            $this->pdf->SetLineWidth(0.1);
+            $this->pdf->SetTextColor(0, 0, 0);
+            //calculo do numero de páginas ???
+            $totPag = 1;
+            //montagem da primeira página
+            $pag = 1;
+            $x = $xInic;
+            $y = $yInic;
+            //coloca o cabeçalho
+            $y += 19;
+            $r = $this->cabecalhoAdicionalDACTE($x, $y, $pag, $totPag);
+            $y+= 62;
+            $r = $this->docOrigAdicionalDACTE($x, $y);
+        }
+        
         //retorna o ID na CTe
         if ($CLASSE_PDF !== false)
         {
@@ -2306,6 +2326,10 @@ class DacteNFePHP extends CommonNFePHP implements DocumentoNFePHP
                 'style' => '');
             $this->__textBox($auxX, $yIniDados, $w * 0.13, $h, $texto, $aFont, 'T', 'L', 0, '');
             $auxX += $w * 0.14;
+            $this->printedNfs++;
+            if ($this->printedNfs >= 8) {
+                break; // se já imprimiu 8 notas, sai
+            }
         }
         foreach ($this->infNFe as $k => $d)
         {
@@ -2340,6 +2364,10 @@ class DacteNFePHP extends CommonNFePHP implements DocumentoNFePHP
                 'style' => '');
             $this->__textBox($auxX, $yIniDados, $w * 0.30, $h, $texto, $aFont, 'T', 'L', 0, '');
             $auxX += $w * 0.14;
+            $this->printedNfs++;
+            if ($this->printedNfs >= 8) {
+                break; // se já imprimiu 8 notas, sai
+            }
         }
     } //fim da função docOrigDACTE
 
@@ -3367,5 +3395,781 @@ class DacteNFePHP extends CommonNFePHP implements DocumentoNFePHP
 
         return 1; // M3, KG, Unidade, litros, mmbtu
     } //fim da função multiUniPeso
+    
+
+    protected function cabecalhoAdicionalDACTE($x = 0, $y = 0, $pag = '1', $totPag = '1')
+    {
+        $this->hDashedLine($x, $y -1, $this->wPrint, 0.1, 80);
+        $oldX = $x;
+        $oldY = $y;
+        if ($this->orientacao == 'P')
+        {
+            $maxW = $this->wPrint;
+        } else
+        {
+            if ($pag == 1)
+            { // primeira página
+                $maxW = $this->wPrint - $this->wCanhoto;
+            } else
+            { // páginas seguintes
+                $maxW = $this->wPrint;
+            }
+        }
+        //##################################################################
+        //coluna esquerda identificação do emitente
+        $w = round($maxW * 0.42);
+        if ($this->orientacao == 'P')
+        {
+            $aFont = array(
+                'font' => $this->fontePadrao,
+                'size' => 6,
+                'style' => '');
+        } else
+        {
+            $aFont = $this->formatNegrito;
+        }
+        $w1 = $w;
+        $h = 35;
+        $oldY += $h;
+        //desenha a caixa
+        $this->__textBox($x, $y, $w + 2, $h + 1);
+        // coloca o logo
+        if (is_file($this->logomarca))
+        {
+            $logoInfo = getimagesize($this->logomarca);
+            //largura da imagem em mm
+            $logoWmm = ($logoInfo[0] / 72) * 25.4;
+            //altura da imagem em mm
+            $logoHmm = ($logoInfo[1] / 72) * 25.4;
+            if ($this->logoAlign == 'L')
+            {
+                $nImgW = round($w / 3, 0);
+                $nImgH = round($logoHmm * ($nImgW / $logoWmm), 0);
+                $xImg = $x + 1;
+                $yImg = round(($h - $nImgH) / 2, 0) + $y;
+                //estabelecer posições do texto
+                $x1 = round($xImg + $nImgW + 1, 0);
+                $y1 = round($h / 3 + $y, 0);
+                $tw = round(2 * $w / 3, 0);
+            }
+            if ($this->logoAlign == 'C')
+            {
+                $nImgH = round($h / 3, 0);
+                $nImgW = round($logoWmm * ($nImgH / $logoHmm), 0);
+                $xImg = round(($w - $nImgW) / 2 + $x, 0);
+                $yImg = $y + 3;
+                $x1 = $x;
+                $y1 = round($yImg + $nImgH + 1, 0);
+                $tw = $w;
+            }
+            if ($this->logoAlign == 'R')
+            {
+                $nImgW = round($w / 3, 0);
+                $nImgH = round($logoHmm * ($nImgW / $logoWmm), 0);
+                $xImg = round($x + ($w - (1 + $nImgW)), 0);
+                $yImg = round(($h - $nImgH) / 2, 0) + $y;
+                $x1 = $x;
+                $y1 = round($h / 3 + $y, 0);
+                $tw = round(2 * $w / 3, 0);
+            }
+            $this->pdf->Image($this->logomarca, $xImg, $yImg, $nImgW, $nImgH, 'jpeg');
+        } else
+        {
+            $x1 = $x;
+            $y1 = round($h / 3 + $y, 0);
+            $tw = $w;
+        }
+        //Nome emitente
+        $aFont = array(
+            'font' => $this->fontePadrao,
+            'size' => 9,
+            'style' => 'B');
+        $texto = $this->__simpleGetValue($this->emit, "xNome");
+        $this->__textBox($x1, $y1, $tw, 8, $texto, $aFont, 'T', 'C', 0, '');
+        //endereço
+        $y1 = $y1 + 3;
+        $aFont = array(
+            'font' => $this->fontePadrao,
+            'size' => 7,
+            'style' => '');
+        $fone = $this->formatFone($this->enderEmit);
+        $lgr = $this->__simpleGetValue($this->enderEmit, "xLgr");
+        $nro = $this->__simpleGetValue($this->enderEmit, "nro");
+        $cpl = $this->__simpleGetValue($this->enderEmit, "xCpl");
+        $bairro = $this->__simpleGetValue($this->enderEmit, "xBairro");
+        $CEP = $this->__simpleGetValue($this->enderEmit, "CEP");
+        $CEP = $this->__format($CEP, "#####-###");
+        $mun = $this->__simpleGetValue($this->enderEmit, "xMun");
+        $UF = $this->__simpleGetValue($this->enderEmit, "UF");
+        $xPais = $this->__simpleGetValue($this->enderEmit, "xPais");
+        $texto = $lgr . "," . $nro . "\n" . $bairro . " - " . $CEP . " - " . $mun . " - " . $UF . " " . $xPais . "\n  Fone/Fax: " . $fone;
+        $this->__textBox($x1 - 5, $y1 + 2, $tw + 5, 8, $texto, $aFont, 'T', 'C', 0, '');
+        //CNPJ/CPF IE
+        $cpfCnpj = $this->formatCNPJCPF($this->emit);
+        $ie = $this->__simpleGetValue($this->emit, "IE");
+        $texto = 'CNPJ/CPF:  ' . $cpfCnpj . '     Insc.Estadual: ' . $ie;
+        $this->__textBox($x1 - 1, $y1 + 12, $tw + 5, 8, $texto, $aFont, 'T', 'C', 0, '');
+        //outra caixa
+        $h1 = 17.5;
+        $y1 = $y + $h + 1;
+        $this->__textBox($x, $y1, $w + 2, $h1);
+        //TIPO DO CT-E
+        $texto = 'TIPO DO CTE';
+        $wa = 37;
+        $aFont = array(
+            'font' => $this->fontePadrao,
+            'size' => 8,
+            'style' => '');
+        $this->__textBox($x, $y1, $w * 0.5, $h1, $texto, $aFont, 'T', 'C', 0, '');
+        $tpCTe = $this->__simpleGetValue($this->ide, "tpCTe");
+        //0 - CT-e Normal,1 - CT-e de Complemento de Valores,
+        //2 - CT-e de Anulação de Valores,3 - CT-e Substituto
+        switch ($tpCTe)
+        {
+            case '0':
+                $texto = 'Normal';
+                break;
+            case '1':
+                $texto = 'Complemento de Valores';
+                break;
+            case '2':
+                $texto = 'Anulação de Valores';
+                break;
+            case '3':
+                $texto = 'Substituto';
+                break;
+            default:
+                $texto = 'ERRO' . $tpCTe . $tpServ;
+        }
+        $aFont = $this->formatNegrito;
+        $this->__textBox($x, $y1 + 3, $w * 0.5, $h1, $texto, $aFont, 'T', 'C', 0, '', false);
+        //TIPO DO SERVIÇO
+        $texto = 'TIPO DO SERVIÇO';
+        $wb = 36;
+        $aFont = array(
+            'font' => $this->fontePadrao,
+            'size' => 8,
+            'style' => '');
+        $this->__textBox($x + $wa + 4.5, $y1, $w * 0.5, $h1, $texto, $aFont, 'T', 'C', 0, '');
+        $tpServ = $this->__simpleGetValue($this->ide, "tpServ");
+        //0 - Normal;1 - Subcontratação;2 - Redespacho;3 - Redespacho Intermediário
+        switch ($tpServ)
+        {
+            case '0':
+                $texto = 'Normal';
+                break;
+            case '1':
+                $texto = 'Subcontratação';
+                break;
+            case '2':
+                $texto = 'Redespacho';
+                break;
+            case '3':
+                $texto = 'Redespacho Intermediário';
+                break;
+            default:
+                $texto = 'ERRO' . $tpServ;
+        }
+        $aFont = $this->formatNegrito;
+        $this->__textBox($x + $wa + 4.5, $y1 + 3, $w * 0.5, $h1, $texto, $aFont, 'T', 'C', 0, '', false);
+        $this->pdf->Line($w * 0.5, $y1, $w * 0.5, $y1 + $h1);
+        //TOMADOR DO SERVIÇO
+        $texto = 'TOMADOR DO SERVIÇO';
+        $wc = 37;
+        $y2 = $y1 + 8;
+        $aFont = array(
+            'font' => $this->fontePadrao,
+            'size' => 8,
+            'style' => '');
+        $this->__textBox($x, $y2, $w * 0.5, $h1, $texto, $aFont, 'T', 'C', 0, '');
+
+        $this->pdf->Line($x, $y1 + 8, $w + 3, $y1 + 8);
+        $toma = $this->__simpleGetValue($this->ide, "toma");
+        //0-Remetente;1-Expedidor;2-Recebedor;3-Destinatário;4 - Outros
+        switch ($toma)
+        {
+            case '0':
+                $texto = 'Remetente';
+                break;
+            case '1':
+                $texto = 'Expedidor';
+                break;
+            case '2':
+                $texto = 'Recebedor';
+                break;
+            case '3':
+                $texto = 'Destinatário';
+                break;
+            case '4':
+                $texto = 'Outros';
+                break;
+            default:
+                $texto = 'ERRO' . $toma;
+        }
+        $aFont = $this->formatNegrito;
+        $this->__textBox($x, $y2 + 3, $w * 0.5, $h1, $texto, $aFont, 'T', 'C', 0, '', false);
+        //FORMA DE PAGAMENTO
+        $texto = 'FORMA DE PAGAMENTO';
+        $wd = 36;
+        $aFont = array(
+            'font' => $this->fontePadrao,
+            'size' => 8,
+            'style' => '');
+        $this->__textBox($x + $wa + 4.5, $y2, $w * 0.5, $h1, $texto, $aFont, 'T', 'C', 0, '');
+        $forma = $this->__simpleGetValue($this->ide, "forPag");
+        //0 - Pago;1 - A pagar;2 - outros
+        switch ($forma)
+        {
+            case '0':
+                $texto = 'Pago';
+                break;
+            case '1':
+                $texto = 'A pagar';
+                break;
+            case '2':
+                $texto = 'Outros';
+                break;
+            default:
+                $texto = 'ERRO' . $forma;
+        }
+        $aFont = $this->formatNegrito;
+        $this->__textBox($x + $wa + 4.5, $y2 + 3, $w * 0.5, $h1, $texto, $aFont, 'T', 'C', 0, '', false);
+        //##################################################################
+        //coluna direita
+        $x += $w + 2;
+        $w = round($maxW * 0.335);
+        $w1 = $w;
+        $h = 11;
+        $this->__textBox($x, $y, $w + 2, $h + 1);
+        $texto = "DACTE";
+        $aFont = array(
+            'font' => $this->fontePadrao,
+            'size' => 10,
+            'style' => 'B');
+        $this->__textBox($x, $y + 1, $w, $h, $texto, $aFont, 'T', 'C', 0, '');
+        $aFont = array(
+            'font' => $this->fontePadrao,
+            'size' => 8,
+            'style' => '');
+        $texto = "Documento Auxiliar do Conhecimento\nde Transporte Eletrônico";
+        $h = 10;
+        $this->__textBox($x, $y + 4, $w, $h, $texto, $aFont, 'T', 'C', 0, '', false);
+        //$aFont = array('font'=>$this->fontePadrao,'size'=>8,'style'=>'');
+        $x1 = $x + $w + 2;
+        $w = round($maxW * 0.22, 0);
+        $w2 = $w;
+        $h = 11;
+        $this->__textBox($x1, $y, $w + 0.5, $h + 1);
+        $texto = "MODAL";
+        $aFont = array(
+            'font' => $this->fontePadrao,
+            'size' => 8,
+            'style' => '');
+        $this->__textBox($x1, $y + 1, $w, $h, $texto, $aFont, 'T', 'C', 0, '');
+        //01-Rodoviário; //02-Aéreo; //03-Aquaviário; //04-Ferroviário;//05-Dutoviário
+        $modal = $this->__simpleGetValue($this->ide, "modal");
+        $this->modal = $modal;
+        switch ($modal)
+        {
+            case '1':
+                $texto = 'Rodoviário';
+                break;
+            case '2':
+                $texto = 'Aéreo';
+                break;
+            case '3':
+                $texto = 'Aquaviário';
+                break;
+            case '4':
+                $texto = 'Ferroviário';
+                break;
+            case '5':
+                $texto = 'Dutoviário';
+                break;
+        }
+        $aFont = array(
+            'font' => $this->fontePadrao,
+            'size' => 10,
+            'style' => 'B');
+        $this->__textBox($x1, $y + 5, $w, $h, $texto, $aFont, 'T', 'C', 0, '');
+        //outra caixa
+        $y += 12;
+        $h = 9;
+        $w = $w1 + $w2 + 2;
+        $this->__textBox($x, $y, $w + 0.5, $h + 1);
+        //modelo
+        $wa = 12;
+        $xa = $x;
+        $texto = 'MODELO';
+        $aFont = array(
+            'font' => $this->fontePadrao,
+            'size' => 8,
+            'style' => '');
+        $this->__textBox($xa, $y + 1, $wa, $h, $texto, $aFont, 'T', 'C', 0, '');
+        $texto = $this->__simpleGetValue($this->ide, "mod");
+        $aFont = $this->formatNegrito;
+        $this->__textBox($xa, $y + 5, $wa, $h, $texto, $aFont, 'T', 'C', 0, '');
+        $this->pdf->Line($x + $wa, $y, $x + $wa, $y + $h + 1);
+        //serie
+        $xa += $wa;
+        $texto = 'SÉRIE';
+        $aFont = array(
+            'font' => $this->fontePadrao,
+            'size' => 8,
+            'style' => '');
+        $this->__textBox($xa, $y + 1, $wa, $h, $texto, $aFont, 'T', 'C', 0, '');
+        $texto = $this->__simpleGetValue($this->ide, "serie");
+        $aFont = $this->formatNegrito;
+        $this->__textBox($xa, $y + 5, $wa, $h, $texto, $aFont, 'T', 'C', 0, '');
+        $this->pdf->Line($xa + $wa, $y, $xa + $wa, $y + $h + 1);
+        //numero
+        $xa += $wa;
+        $wa = 20;
+        $texto = 'NÚMERO';
+        $aFont = array(
+            'font' => $this->fontePadrao,
+            'size' => 8,
+            'style' => '');
+        $this->__textBox($xa, $y + 1, $wa, $h, $texto, $aFont, 'T', 'C', 0, '');
+        $texto = $this->__simpleGetValue($this->ide, "nCT");
+        $aFont = $this->formatNegrito;
+        $this->__textBox($xa, $y + 5, $wa, $h, $texto, $aFont, 'T', 'C', 0, '');
+        $this->pdf->Line($xa + $wa, $y, $xa + $wa, $y + $h + 1);
+        //folha
+        $xa += $wa;
+        $wa = 12;
+        $texto = 'FL';
+        $aFont = array(
+            'font' => $this->fontePadrao,
+            'size' => 8,
+            'style' => '');
+        $this->__textBox($xa, $y + 1, $wa, $h, $texto, $aFont, 'T', 'C', 0, '');
+        $texto = '1/1';
+        $aFont = $this->formatNegrito;
+        $this->__textBox($xa, $y + 5, $wa, $h, $texto, $aFont, 'T', 'C', 0, '');
+        $this->pdf->Line($xa + $wa, $y, $xa + $wa, $y + $h + 1);
+        //data  hora de emissão
+        $xa += $wa;
+        $wa = 30;
+        $texto = 'DATA E HORA DE EMISSÃO';
+        $aFont = array(
+            'font' => $this->fontePadrao,
+            'size' => 8,
+            'style' => '');
+        $this->__textBox($xa, $y + 1, $wa, $h, $texto, $aFont, 'T', 'C', 0, '');
+        $texto = !empty($this->ide->getElementsByTagName("dhEmi")->item(0)->nodeValue) ? date('d/m/Y H:i:s', $this->__convertTime($this->__simpleGetValue($this->
+            ide, "dhEmi"))) : '';
+        $aFont = $this->formatNegrito;
+        $this->__textBox($xa, $y + 5, $wa, $h, $texto, $aFont, 'T', 'C', 0, '');
+        $this->pdf->Line($xa + $wa, $y, $xa + $wa, $y + $h + 1);
+        //ISUF
+        $xa += $wa;
+        $wa = 32;
+        $texto = 'INSC. SUFRAMA DO DESTINATÁRIO';
+        $aFont = $this->formatPadrao;
+        $this->__textBox($xa, $y + 1, $wa, $h, $texto, $aFont, 'T', 'C', 0, '');
+        $texto = $this->__simpleGetValue($this->dest, "ISUF");
+        $aFont = array(
+            'font' => $this->fontePadrao,
+            'size' => 7,
+            'style' => 'B');
+        $this->__textBox($xa, $y + 5, $wa, $h, $texto, $aFont, 'T', 'C', 0, '');
+        //outra caixa
+        $y += $h + 1;
+        $h = 23;
+        $h1 = 14;
+        $this->__textBox($x, $y, $w + 0.5, $h1);
+        //CODIGO DE BARRAS
+        $chave_acesso = str_replace('CTe', '', $this->infCte->getAttribute("Id"));
+        $bW = 85;
+        $bH = 10;
+        //codigo de barras
+        $this->pdf->SetFillColor(0, 0, 0);
+        $this->pdf->Code128($x + (($w - $bW) / 2), $y + 2, $chave_acesso, $bW, $bH);
+        $this->__textBox($x, $y + $h1, $w + 0.5, $h1 - 6);
+        $texto = 'CHAVE DE ACESSO';
+        $aFont = $this->formatPadrao;
+        $this->__textBox($x, $y + $h1, $w, $h, $texto, $aFont, 'T', 'L', 0, '');
+        $aFont = $this->formatNegrito;
+        $texto = $this->__format($chave_acesso, '##.####.##.###.###/####-##-##-###-###.###.###-###.###.###-#');
+        $this->__textBox($x, $y + $h1 + 3, $w, $h, $texto, $aFont, 'T', 'C', 0, '');
+        $this->__textBox($x, $y + $h1 + 8, $w + 0.5, $h1 - 4.5);
+        $texto = "Consulta de autenticidade no portal nacional do CT-e, ";
+        $texto .= "no site da Sefaz Autorizadora, \r\n ou em http://www.cte.fazenda.gov.br";
+        if ($this->tpEmis == 5 || $this->tpEmis == 7 || $this->tpEmis == 8)
+        {
+            $texto = "";
+            $this->pdf->SetFillColor(0, 0, 0);
+            if ($this->tpEmis == 5)
+            {
+
+                $chaveContingencia = $this->__geraChaveAdicionalDeContingencia();
+                $this->pdf->Code128($x + 20, $y1 + 10, $chaveContingencia, $bW * .9, $bH / 2);
+
+            } else
+            {
+                $chaveContingencia = $this->__simpleGetValue($this->protCTe, "nProt");
+                $this->pdf->Code128($x + 40, $y1 + 10, $chaveContingencia, $bW * .4 , $bH / 2);
+            }
+
+
+            //codigo de barras
+
+        }
+
+        $aFont = array(
+            'font' => $this->fontePadrao,
+            'size' => 8,
+            'style' => '');
+        $this->__textBox($x, $y + $h1 + 9, $w, $h, $texto, $aFont, 'T', 'C', 0, '');
+        //outra caixa
+        $y += $h + 1;
+        $h = 8.5;
+        $wa = $w;
+        $this->__textBox($x, $y + 7.5, $w + 0.5, $h);
+        if ($this->__cteDPEC())
+        {
+            $texto = 'NÚMERO DE REGISTRO DPEC';
+        } elseif ($this->tpEmis == 5 || $this->tpEmis == 7 || $this->tpEmis == 8)
+        {
+            $texto = "DADOS DO CT-E";
+        } else
+        {
+            $texto = 'PROTOCOLO DE AUTORIZAÇÃO DE USO';
+        }
+        $aFont = $this->formatPadrao;
+        $this->__textBox($x, $y + 7.5, $wa, $h, $texto, $aFont, 'T', 'L', 0, '');
+        if ($this->__cteDPEC())
+        {
+            $texto = $this->numero_registro_dpec;
+
+        } elseif ($this->tpEmis == 5)
+        {
+            $chaveContingencia = $this->__geraChaveAdicionalDeContingencia();
+            $aFont = array(
+                'font' => $this->fontePadrao,
+                'size' => 8,
+                'style' => 'B');
+            $texto = $this->__format($chaveContingencia, "#### #### #### #### #### #### #### #### ####");
+            $cStat = '';
+
+        } else
+        {
+            $texto = $this->__simpleGetValue($this->protCTe, "nProt") . " - ";
+            $texto .= date('d/m/Y   H:i:s', $this->__convertTime($this->__simpleGetValue($this->protCTe, "dhRecbto")));
+            $texto = $this->__simpleGetValue($this->protCTe, "nProt") == '' ? '' : $texto;
+        }
+        $aFont = $this->formatNegrito;
+        $this->__textBox($x, $y + 12, $wa, $h, $texto, $aFont, 'T', 'C', 0, '');
+        //CFOP
+        $x = $oldX;
+        $h = 8.5;
+        $w = round($maxW * 0.42);
+        $y1 = $y + 7.5;
+        $this->__textBox($x, $y1, $w + 2, $h);
+        $texto = 'CFOP - NATUREZA DA PRESTAÇÃO';
+        $aFont = array(
+            'font' => $this->fontePadrao,
+            'size' => 8,
+            'style' => '');
+        $this->__textBox($x, $y1, $w, $h, $texto, $aFont, 'T', 'L', 0, '');
+        $texto = $this->__simpleGetValue($this->ide, "CFOP") . ' - ' . $this->__simpleGetValue($this->ide, "natOp");
+        $aFont = $this->formatNegrito;
+        $this->__textBox($x, $y1 + 3.5, $w, $h, $texto, $aFont, 'T', 'L', 0, '');
+
+        //#########################################################################
+        //Indicação de CTe Homologação, cancelamento e falta de protocolo
+        $tpAmb = $this->ide->getElementsByTagName('tpAmb')->item(0)->nodeValue;
+        //indicar cancelamento
+        if ($this->__cteCancelada())
+        {
+            //101 Cancelamento
+            $x = 10;
+            $y = $this->hPrint - 130;
+            $h = 25;
+            $w = $maxW - (2 * $x);
+            $this->pdf->SetTextColor(90, 90, 90);
+            $texto = "CTe CANCELADO";
+            $aFont = array(
+                'font' => $this->fontePadrao,
+                'size' => 48,
+                'style' => 'B');
+            $this->__textBox($x, $y, $w, $h, $texto, $aFont, 'C', 'C', 0, '');
+            $this->pdf->SetTextColor(0, 0, 0);
+        }
+        if ($this->__cteDenegada())
+        {
+            //110 Denegada
+            $x = 10;
+            $y = $this->hPrint - 130;
+            $h = 25;
+            $w = $maxW - (2 * $x);
+            $this->pdf->SetTextColor(90, 90, 90);
+            $texto = "CTe USO DENEGADO";
+            $aFont = array(
+                'font' => $this->fontePadrao,
+                'size' => 48,
+                'style' => 'B');
+            $this->__textBox($x, $y, $w, $h, $texto, $aFont, 'C', 'C', 0, '');
+            $y += $h;
+            $h = 5;
+            $w = $maxW - (2 * $x);
+            $texto = "SEM VALOR FISCAL";
+            $aFont = array(
+                'font' => $this->fontePadrao,
+                'size' => 48,
+                'style' => 'B');
+            $this->__textBox($x, $y, $w, $h, $texto, $aFont, 'C', 'C', 0, '');
+            $this->pdf->SetTextColor(0, 0, 0);
+        }
+        //indicar sem valor
+        if ($tpAmb != 1)
+        {
+            $x = 10;
+            if ($this->orientacao == 'P')
+            {
+                $y = round($this->hPrint * 2 / 3, 0);
+            } else
+            {
+                $y = round($this->hPrint / 2, 0);
+            }
+            $h = 5;
+            $w = $maxW - (2 * $x);
+            $this->pdf->SetTextColor(90, 90, 90);
+            $texto = "SEM VALOR FISCAL";
+            $aFont = array(
+                'font' => $this->fontePadrao,
+                'size' => 48,
+                'style' => 'B');
+            $this->__textBox($x, $y, $w, $h, $texto, $aFont, 'C', 'C', 0, '');
+            $aFont = array(
+                'font' => $this->fontePadrao,
+                'size' => 30,
+                'style' => 'B');
+            $texto = "AMBIENTE DE HOMOLOGAÇÃO";
+            $this->__textBox($x, $y + 14, $w, $h, $texto, $aFont, 'C', 'C', 0, '');
+            $this->pdf->SetTextColor(0, 0, 0);
+        } else
+        {
+            $x = 10;
+            if ($this->orientacao == 'P')
+            {
+                $y = round($this->hPrint * 2 / 3, 0);
+            } else
+            {
+                $y = round($this->hPrint / 2, 0);
+            } //fim orientacao
+            $h = 5;
+            $w = $maxW - (2 * $x);
+            $this->pdf->SetTextColor(90, 90, 90);
+            //indicar FALTA DO PROTOCOLO se NFe não for em contingência
+            if (($this->tpEmis == 5 || $this->tpEmis == 7 || $this->tpEmis == 8) && !$this->__cteDPEC())
+            {
+                //Contingência
+                $texto = "DACTE Emitido em Contingência";
+                $aFont = array(
+                    'font' => $this->fontePadrao,
+                    'size' => 48,
+                    'style' => 'B');
+                $this->__textBox($x, $y, $w, $h, $texto, $aFont, 'C', 'C', 0, '');
+                $aFont = array(
+                    'font' => $this->fontePadrao,
+                    'size' => 30,
+                    'style' => 'B');
+                $texto = "devido à problemas técnicos";
+                $this->__textBox($x, $y + 12, $w, $h, $texto, $aFont, 'C', 'C', 0, '');
+            } else
+            {
+                if (!isset($this->cteProc))
+                {
+                    if (!$this->__cteDPEC())
+                    {
+                        $texto = "SEM VALOR FISCAL";
+                        $aFont = array(
+                            'font' => $this->fontePadrao,
+                            'size' => 48,
+                            'style' => 'B');
+                        $this->__textBox($x, $y, $w, $h, $texto, $aFont, 'C', 'C', 0, '');
+                    }
+                    $aFont = array(
+                        'font' => $this->fontePadrao,
+                        'size' => 30,
+                        'style' => 'B');
+                    $texto = "FALTA PROTOCOLO DE APROVAÇÃO DA SEFAZ";
+                    if (!$this->__cteDPEC())
+                    {
+                        $this->__textBox($x, $y + 12, $w, $h, $texto, $aFont, 'C', 'C', 0, '');
+                    } else
+                    {
+                        $this->__textBox($x, $y + 25, $w, $h, $texto, $aFont, 'C', 'C', 0, '');
+                    }
+                } //fim cteProc
+                if ($this->tpEmis == 4)
+                {
+                    //DPEC
+                    $x = 10;
+                    $y = $this->hPrint - 130;
+                    $h = 25;
+                    $w = $maxW - (2 * $x);
+                    $this->pdf->SetTextColor(200, 200, 200); // 90,90,90 é muito escuro
+                    $texto = "DANFE impresso em contingência -\n" . "DPEC regularmente recebido pela Receita\n" . "Federal do Brasil";
+                    $aFont = array(
+                        'font' => $this->fontePadrao,
+                        'size' => 48,
+                        'style' => 'B');
+                    $this->__textBox($x, $y, $w, $h, $texto, $aFont, 'C', 'C', 0, '');
+                    $this->pdf->SetTextColor(0, 0, 0);
+                }
+            } //fim tpEmis
+            $this->pdf->SetTextColor(0, 0, 0);
+        }
+        return $oldY;
+    } //fim __cabecalhoDANFE
+    
+    protected function docOrigAdicionalDACTE($x = 0, $y = 0)
+    {
+        $oldX = $x;
+        $oldY = $y;
+        if ($this->orientacao == 'P')
+        {
+            $maxW = $this->wPrint;
+        } else
+        {
+            $maxW = $this->wPrint - $this->wCanhoto;
+        }
+        $w = $maxW;
+
+        if ($this->modal == '1')
+        {
+            $h = $this->lota == 1 ? 210 : 53;
+        } else
+        {
+            $h = 210;
+        }
+        $texto = 'DOCUMENTOS ORIGINÁRIOS';
+        $aFont = $this->formatPadrao;
+        $this->__textBox($x, $y, $w, $h, $texto, $aFont, 'T', 'C', 1, '');
+        $descr1 = 'TIPO DOC';
+        $descr2 = 'CNPJ/CHAVE';
+        $descr3 = 'SÉRIE/NRO. DOCUMENTO';
+        $y += 3.4;
+        $this->pdf->Line($x, $y, $w + 1, $y);
+        $texto = $descr1;
+        $aFont = $this->formatPadrao;
+        $this->__textBox($x, $y, $w * 0.10, $h, $texto, $aFont, 'T', 'L', 0, '');
+        $yIniDados = $y;
+        $x += $w * 0.09;
+        $texto = $descr2;
+        $aFont = $this->formatPadrao;
+        $this->__textBox($x, $y, $w * 0.23, $h, $texto, $aFont, 'T', 'L', 0, '');
+        $x += $w * 0.28;
+        $texto = $descr3;
+        $aFont = $this->formatPadrao;
+        $this->__textBox($x, $y, $w * 0.13, $h, $texto, $aFont, 'T', 'L', 0, '');
+        $x += $w * 0.13;
+        if ($this->modal == '1')
+        {
+            if ($this->lota == 1)
+            {
+                $this->pdf->Line($x, $y, $x, $y + 206.5);
+            } else
+            {
+                $this->pdf->Line($x, $y, $x, $y + 49.5);
+            }
+        } else
+        {
+            $this->pdf->Line($x, $y, $x, $y + 21.5);
+        }
+        $texto = $descr1;
+        $aFont = $this->formatPadrao;
+        $this->__textBox($x, $y, $w * 0.10, $h, $texto, $aFont, 'T', 'L', 0, '');
+        $x += $w * 0.10;
+        $texto = $descr2;
+        $aFont = $this->formatPadrao;
+        $this->__textBox($x, $y, $w * 0.23, $h, $texto, $aFont, 'T', 'L', 0, '');
+        $x += $w * 0.27;
+        $texto = $descr3;
+        $aFont = $this->formatPadrao;
+        $this->__textBox($x, $y, $w * 0.13, $h, $texto, $aFont, 'T', 'L', 0, '');
+        $auxX = $oldX;
+        $yIniDados += 4;
+        $count = 0;
+        foreach ($this->infNF as $k => $d)
+        {
+            $count++;
+            if ($count <= $this->printedNfs) {
+                continue;
+            }
+            $tp = $this->infNF->item($k)->getElementsByTagName('mod')->item(0)->nodeValue;
+            $cnpj = $this->formatCNPJCPF($this->rem);
+            $doc = $this->infNF->item($k)->getElementsByTagName('serie')->item(0)->nodeValue;
+            $doc .= '/' . $this->infNF->item($k)->getElementsByTagName('nDoc')->item(0)->nodeValue;
+            if ($auxX > $w * 0.90)
+            {
+                $yIniDados = $yIniDados + 4;
+                $auxX = $oldX;
+            }
+            $texto = $tp;
+            $aFont = array(
+                'font' => $this->fontePadrao,
+                'size' => 8,
+                'style' => '');
+            $this->__textBox($auxX, $yIniDados, $w * 0.10, $h, $texto, $aFont, 'T', 'L', 0, '');
+            $auxX += $w * 0.09;
+            $texto = $cnpj;
+            $aFont = array(
+                'font' => $this->fontePadrao,
+                'size' => 8,
+                'style' => '');
+            $this->__textBox($auxX, $yIniDados, $w * 0.23, $h, $texto, $aFont, 'T', 'L', 0, '');
+            $auxX += $w * 0.28;
+            $texto = $doc;
+            $aFont = array(
+                'font' => $this->fontePadrao,
+                'size' => 8,
+                'style' => '');
+            $this->__textBox($auxX, $yIniDados, $w * 0.13, $h, $texto, $aFont, 'T', 'L', 0, '');
+            $auxX += $w * 0.14;
+        }
+        foreach ($this->infNFe as $k => $d)
+        {
+            $count++;
+            if ($count <= $this->printedNfs) {
+                continue;
+            }
+            $tp = 'NFE';
+            $chaveNFe = $this->infNFe->item($k)->getElementsByTagName('chave')->item(0)->nodeValue;
+            $numNFe = substr($chaveNFe, 25, 9);
+            $serieNFe = substr($chaveNFe, 22, 3);
+            $doc = $serieNFe . '/' . $numNFe;
+            if ($auxX > $w * 0.90)
+            {
+                $yIniDados = $yIniDados + 4;
+                $auxX = $oldX;
+            }
+            $texto = $tp;
+            $aFont = array(
+                'font' => $this->fontePadrao,
+                'size' => 8,
+                'style' => '');
+            $this->__textBox($auxX, $yIniDados, $w * 0.10, $h, $texto, $aFont, 'T', 'L', 0, '');
+            $auxX += $w * 0.09;
+            $texto = $chaveNFe;
+            $aFont = array(
+                'font' => $this->fontePadrao,
+                'size' => 8,
+                'style' => '');
+            $this->__textBox($auxX, $yIniDados, $w * 0.27, $h, $texto, $aFont, 'T', 'L', 0, '');
+            $auxX += $w * 0.28;
+            $texto = $doc;
+            $aFont = array(
+                'font' => $this->fontePadrao,
+                'size' => 8,
+                'style' => '');
+            $this->__textBox($auxX, $yIniDados, $w * 0.30, $h, $texto, $aFont, 'T', 'L', 0, '');
+            $auxX += $w * 0.14;
+        }
+    } //fim da função docOrigDACTE
+    
 }
 //fim da classe DacteNFePHP
