@@ -1823,7 +1823,7 @@ class CTeNFePHP {
                             $novoprot->formatOutput = true;
                             $novoprot->preserveWhiteSpace = false;
                             $pCTe = $novoprot->createElement("protCTe");
-                            $pCTe->setAttribute("versao", "1.03");
+                            $pCTe->setAttribute("versao", "1.04");
                             // Importa o node e todo o seu conteudo
                             $node = $novoprot->importNode($infProt, true);
                             // acrescenta ao node principal
