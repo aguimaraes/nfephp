@@ -1803,8 +1803,8 @@ class CTeNFePHP {
                 $aRetorno['cStat'] = $doc->getElementsByTagName('cStat')->item(0)->nodeValue;
                 // motivo da resposta (opcional)
                 $aRetorno['xMotivo'] = !empty($doc->getElementsByTagName('xMotivo')->item(0)->nodeValue) ? $doc->getElementsByTagName('xMotivo')->item(0)->nodeValue : '';
+                $aProt = '';
                 if ($cStat == '104'){
-                    $aProt = '';
                     //aqui podem ter varios retornos dependendo do numero de CTe enviados no Lote e já processadas
                     $protCTe = $doc->getElementsByTagName('protCTe');
                     foreach ($protCTe as $d){
