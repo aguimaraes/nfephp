@@ -714,6 +714,7 @@ class CTeNFePHP {
         $this->valDir=$this->arqDir . $sAmb . DIRECTORY_SEPARATOR . 'validadas' . DIRECTORY_SEPARATOR;
         $this->rejDir=$this->arqDir . $sAmb . DIRECTORY_SEPARATOR . 'rejeitadas' . DIRECTORY_SEPARATOR;
         $this->envDir=$this->arqDir . $sAmb . DIRECTORY_SEPARATOR . 'enviadas' . DIRECTORY_SEPARATOR;
+        $this->evtDir=$this->arqDir . $sAmb . DIRECTORY_SEPARATOR . 'eventos' . DIRECTORY_SEPARATOR;
         $this->aprDir=$this->envDir . 'aprovadas'  . DIRECTORY_SEPARATOR;
         $this->denDir=$this->envDir . 'denegadas'  . DIRECTORY_SEPARATOR;
         $this->repDir=$this->envDir . 'reprovadas' . DIRECTORY_SEPARATOR;
@@ -2864,6 +2865,196 @@ class CTeNFePHP {
         curl_close($oCurl);
         return $xml;
     } //fim __sendSOAP2
+    
+    /**
+     * Solicita o cancelamento do CT enviado
+     *
+     * @name cancelEvent
+     * @version 1.00
+     * @package CTePHP
+     * @author Roberto L. Machado <linux.rlm at gmail dot com>
+	 *      CONTRIBUIÇÃO (em ordem alfabetica):
+     * 		Luciano Antony <lucianoantony at gmail dot com>
+     * @param	string  $id      ID da CTe com 44 digitos (sem o CTe na frente dos numeros)
+     * @param   string  $protId     Numero do protocolo de aceitaçao do lote de CTe enviado anteriormente pelo SEFAZ
+     * @param   boolean $modSOAP    1 usa __sendSOAP e 2 usa __sendSOAP2
+     * @return	mixed false se falha ou array [
+    **/
+    public function cancelEvent($chCTe='',$protId, $just, $modSOAP='2',&$resp=''){
+        try {
+            if ($chCTe == ''){
+                $msg = "A chave do CTe recebida é obrigatória.";
+                throw new nfephpException($msg);
+            }
+            if (strlen($just) < 15){
+                $msg = "A justificativa tem que ter no mínimo 15 caracteres.";
+                throw new nfephpException($msg);
+            }
+            $tpEvento	= '110111';
+            $resp = array('bStat'=>false,'cStat'=>'','xMotivo'=>'','arquivo'=>'');
+            $tpAmb = $this->tpAmb;
+            // Verifica se o SCAN esta habilitado
+            $aURL = $this->loadSEFAZ( $this->raizDir . 'config' . DIRECTORY_SEPARATOR . "cte_ws1.xml", $this->tpAmb, 'SCAN');
+            if (!$this->enableSCAN){
+                $aURL = $this->aURL;
+            }
+            //Data e hora do evento no formato AAAA-MM-DDTHH:MM:SS (UTC)
+            $dhEvento = date('Y-m-d').'T'.date('H:i:s');
+            //montagem do namespace do serviço
+            $servico = 'CteRecepcaoEvento';
+            //recuperação da versão
+            $versao = $aURL[$servico]['version'];
+            //recuperação da url do serviço
+            $urlservico = $aURL[$servico]['URL'];
+            //recuperação do método
+            $metodo = $aURL[$servico]['method'];
+            //montagem do namespace do serviço
+            $namespace = $this->URLPortal.'/wsdl/'.$servico;
+            // 2 + 6 + 44 + 2 = 54 digitos
+            //“ID” + tpEvento + chave da NF-e + nSeqEvento
+            $nSeqEvento = '1';
+            $id = "ID".$tpEvento.$chCTe.'0'.$nSeqEvento;
+            //monta mensagem
+            $Ev='';
+            $Ev .= "<eventoCTe xmlns=\"$this->URLPortal\" versao=\"$versao\">";
+            $Ev .= "<infEvento Id=\"$id\">";
+            $Ev .= "<cOrgao>$this->cUF</cOrgao>";
+            $Ev .= "<tpAmb>$tpAmb</tpAmb>";
+            $Ev .= "<CNPJ>$this->cnpj</CNPJ>";
+            $Ev .= "<chCTe>$chCTe</chCTe>";
+            $Ev .= "<dhEvento>$dhEvento</dhEvento>";
+            $Ev .= "<tpEvento>$tpEvento</tpEvento>";
+            $Ev .= "<nSeqEvento>$nSeqEvento</nSeqEvento>";
+            $Ev .= "<detEvento versaoEvento=\"$versao\">";
+			$Ev .= "<evCancCTe>
+						<descEvento>Cancelamento</descEvento>
+						<nProt>$protId</nProt>
+						<xJust>$just</xJust>
+					</evCancCTe>";
+            $Ev .= "</detEvento></infEvento>";
+            $Ev .= "</eventoCTe>";
+
+            $tagid = 'infEvento';
+            $Ev = $this->signXML($Ev, $tagid);
+            $Ev = str_replace('<?xml version="1.0"?>','', $Ev);
+            $Ev = str_replace('<?xml version="1.0" encoding="utf-8"?>','', $Ev);
+            $Ev = str_replace('<?xml version="1.0" encoding="UTF-8"?>','', $Ev);
+            $Ev = str_replace(array("\r","\n","\s"),"", $Ev);
+            //montagem dos dados
+            $dados = '';
+            //$dados .= "<eventoCTe xmlns=\"$this->URLPortal\" versao=\"$versao\">";
+            //$dados .= "<idLote>$numLote</idLote>";
+            $dados .= $Ev;
+            //$dados .= "</eventoCTe>";
+            //montagem da mensagem
+            $cabec = "<cteCabecMsg xmlns=\"$namespace\"><cUF>$this->cUF</cUF><versaoDados>$versao</versaoDados></cteCabecMsg>";
+            $dados = "<cteDadosMsg xmlns=\"$namespace\">$dados</cteDadosMsg>";
+            //grava solicitação em temp
+            $tempFilePath = $this->temDir."$chCTe-$nSeqEvento-envCTe.xml";
+            if (!file_put_contents($tempFilePath, $Ev)){
+                $msg = "Falha na gravação do arquivo temporário de envio.";
+                throw new nfephpException($msg);
+            }
+            //envia dados via SOAP
+            if ($modSOAP == '2'){
+                $retorno = $this->__sendSOAP2($urlservico, $namespace, $cabec, $dados, $metodo, $tpAmb);
+            } else {
+                $retorno = $this->__sendSOAP($urlservico, $namespace, $cabec, $dados, $metodo, $tpAmb,$this->UF);
+            }
+            //verifica o retorno
+            if (!$retorno){
+                //não houve retorno
+                $msg = "Nao houve retorno Soap verifique a mensagem de erro e o debug!!";
+                throw new nfephpException($msg);
+            }
+            /**** Temporario, retirar depois dos testes ***** Lelo */
+            if (!file_put_contents($this->temDir."$chCTe-md.xml", $retorno)) {
+                echo "Falha na gravação do arquivo md!!";
+            }
+            //tratar dados de retorno
+            $xmlMDe = new DOMDocument('1.0', 'utf-8'); //cria objeto DOM
+            $xmlMDe->formatOutput = false;
+            $xmlMDe->preserveWhiteSpace = false;
+            $xmlMDe->loadXML($retorno,LIBXML_NOBLANKS | LIBXML_NOEMPTYTAG);
+            $retEvento = $xmlMDe->getElementsByTagName("retEventoCTe")->item(0);
+            $cStat = !empty($retEvento->getElementsByTagName('cStat')->item(0)->nodeValue) ? $retEvento->getElementsByTagName('cStat')->item(0)->nodeValue : '';
+            $xMotivo = !empty($retEvento->getElementsByTagName('xMotivo')->item(0)->nodeValue) ? $retEvento->getElementsByTagName('xMotivo')->item(0)->nodeValue : '';
+            if ($cStat == ''){
+                //houve erro
+                $msg = "cStat está em branco, houve erro na comunicação Soap verifique a mensagem de erro e o debug!!";
+                throw new nfephpException($msg);
+            }
+            //tratar erro de versão do XML
+            if ($cStat == '238' || $cStat == '239'){
+                $this->__trata239($retorno, $sigla, $tpAmb, $servico, $versao);
+                $msg = "Versão do arquivo XML não suportada no webservice!!";
+                throw new nfephpException($msg);
+            }
+            //erro no processamento
+            if ($cStat != '135' && $cStat != '136' ){
+                //se cStat <> 135 houve erro e o lote foi rejeitado
+                $msg = "O Lote foi rejeitado : $cStat - $xMotivo\n";
+                throw new nfephpException($msg);
+            }
+            if ($cStat == '136'){
+                $msg = "O Evento foi registrado mas a CTe não foi localizada : $cStat - $xMotivo\n";
+                throw new nfephpException($msg);
+            }
+            if ($cStat == '215'){
+                $msg = "Erro: $cStat - $xMotivo\n";
+                throw new nfephpException($msg);
+            }
+            //o evento foi aceito
+            $xmlenvMDe = new DOMDocument('1.0', 'utf-8'); //cria objeto DOM
+            $xmlenvMDe->formatOutput = false;
+            $xmlenvMDe->preserveWhiteSpace = false;
+            $xmlenvMDe->loadXML($Ev,LIBXML_NOBLANKS | LIBXML_NOEMPTYTAG);
+            $evento = $xmlenvMDe->getElementsByTagName("eventoCTe")->item(0);
+            //Processo completo solicitação + protocolo
+            $xmlprocMDe = new DOMDocument('1.0', 'utf-8');; //cria objeto DOM
+            $xmlprocMDe->formatOutput = false;
+            $xmlprocMDe->preserveWhiteSpace = false;
+            //cria a tag procEventoNFe
+            $procEventoNFe = $xmlprocMDe->createElement('procEventoCTe');
+            $xmlprocMDe->appendChild($procEventoNFe);
+            //estabele o atributo de versão
+            $eventProc_att1 = $procEventoNFe->appendChild($xmlprocMDe->createAttribute('versao'));
+            $eventProc_att1->appendChild($xmlprocMDe->createTextNode($versao));
+            //estabelece o atributo xmlns
+            $eventProc_att2 = $procEventoNFe->appendChild($xmlprocMDe->createAttribute('xmlns'));
+            $eventProc_att2->appendChild($xmlprocMDe->createTextNode($this->URLPortal));
+            //carrega o node evento
+            $node1 = $xmlprocMDe->importNode($evento, true);
+            $procEventoNFe->appendChild($node1);
+            //carrega o node retEvento
+            $node2 = $xmlprocMDe->importNode($retEvento, true);
+            $procEventoNFe->appendChild($node2);
+            //salva o xml como string em uma variável
+            $procXML = $xmlprocMDe->saveXML();
+            //remove as informações indesejadas
+            $procXML = str_replace("xmlns:default=\"http://www.w3.org/2000/09/xmldsig#\"",'',$procXML);
+            $procXML = str_replace('default:','',$procXML);
+            $procXML = str_replace(':default','',$procXML);
+            $procXML = str_replace("\n",'',$procXML);
+            $procXML = str_replace("\r",'',$procXML);
+            $procXML = str_replace("\s",'',$procXML);
+            $filename = $this->evtDir."$chCTe-$tpEvento-$nSeqEvento-procCTe.xml";
+            $resp = array('bStat'=>true,'cStat'=>$cStat,'xMotivo'=>$xMotivo,'arquivo'=>$filename);
+            //salva o arquivo xml
+            if (!file_put_contents($filename, $procXML)){
+                $msg = "Falha na gravação do arquivo procCTe!!";
+                throw new nfephpException($msg);
+            }
+        } catch (nfephpException $e) {
+            $this->__setError($e->getMessage());
+            if ($this->exceptions) {
+                throw $e;
+            }
+            $resp = array('bStat'=>false,'cStat'=>$cStat,'xMotivo'=>$xMotivo,'arquivo'=>'');
+            return false;
+        }
+        return $retorno;
+    }
 
    /**
     * __convertTime
