@@ -1119,6 +1119,9 @@ class DacteNFePHP extends CommonNFePHP implements DocumentoNFePHP
             'style' => '');
         $this->__textBox($x, $y1, $w, $h, $texto, $aFont, 'T', 'L', 0, '');
         $texto = $this->__simpleGetValue($this->ide, "CFOP") . ' - ' . $this->__simpleGetValue($this->ide, "natOp");
+        if (function_exists('mb_detect_encoding') && mb_detect_encoding($natOp, 'UTF-8', true) === 'UTF-8') {
+            $texto = utf8_decode($texto);
+        }
         $aFont = $this->formatNegrito;
         $this->__textBox($x, $y1 + 3.5, $w, $h, $texto, $aFont, 'T', 'L', 0, '');
         //ORIGEM DA PRESTAÇÃO
