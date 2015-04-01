@@ -2811,12 +2811,17 @@ class CTeNFePHP {
                 curl_setopt($oCurl, CURLOPT_PROXYAUTH, "CURLAUTH_BASIC");
             } //fim if senha proxy
         }//fim if aProxy
-
+        //força a resolução de nomes com IPV4 e não com IPV6, isso
+        //pode acelerar temporáriamente as falhas ou demoras decorrentes de
+        //ambiente mal preparados como os da SEFAZ GO, porém pode causar
+        //problemas no futuro quando os endereços IPV4 deixarem de ser usados
+        curl_setopt($oCurl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
+        curl_setopt($oCurl, CURLOPT_CONNECTTIMEOUT, 10);
         curl_setopt($oCurl, CURLOPT_URL, $urlsefaz.'');
         curl_setopt($oCurl, CURLOPT_PORT , 443);
         curl_setopt($oCurl, CURLOPT_VERBOSE, 1); //apresenta informações de conexão na tela
         curl_setopt($oCurl, CURLOPT_HEADER, 1); //retorna o cabeçalho de resposta
-        curl_setopt($oCurl, CURLOPT_SSLVERSION, 3);
+        //curl_setopt($oCurl, CURLOPT_SSLVERSION, 3); // deixe o PHP decidir
         curl_setopt($oCurl, CURLOPT_SSL_VERIFYHOST, 0);
         curl_setopt($oCurl, CURLOPT_SSL_VERIFYPEER, 0);
         curl_setopt($oCurl, CURLOPT_SSLCERT, $this->pubKEY);
