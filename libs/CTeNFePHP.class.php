@@ -1632,8 +1632,6 @@ class CTeNFePHP {
             $nome = $this->temDir . $id . '-rec.xml';
             $nome = $doc->save($nome);
         } else {
-            $this->errStatus = true;
-            $this->errMsg = 'Nao houve retorno Soap verifique a mensagem de erro e o debug!!';
             $aRetorno = false;
         }
         return $aRetorno;
