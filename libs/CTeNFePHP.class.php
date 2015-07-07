@@ -3056,7 +3056,7 @@ class CTeNFePHP {
             $resp = array('bStat'=>false,'cStat'=>$cStat,'xMotivo'=>$xMotivo,'arquivo'=>'');
             return false;
         }
-        return $retorno;
+        return $resp;
     }
 
    /**
