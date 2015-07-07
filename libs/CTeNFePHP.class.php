@@ -2819,7 +2819,7 @@ class CTeNFePHP {
         curl_setopt($oCurl, CURLOPT_PORT , 443);
         curl_setopt($oCurl, CURLOPT_VERBOSE, 1); //apresenta informações de conexão na tela
         curl_setopt($oCurl, CURLOPT_HEADER, 1); //retorna o cabeçalho de resposta
-        //curl_setopt($oCurl, CURLOPT_SSLVERSION, 3); // deixe o PHP decidir
+        curl_setopt($oCurl, CURLOPT_SSLVERSION, 3);
         curl_setopt($oCurl, CURLOPT_SSL_VERIFYHOST, 0);
         curl_setopt($oCurl, CURLOPT_SSL_VERIFYPEER, 0);
         curl_setopt($oCurl, CURLOPT_SSLCERT, $this->pubKEY);
