@@ -1643,6 +1643,409 @@ class CTeNFePHP {
      * autorização da CTe$tpAmb = $this->tpAmb;
      * Caso $this->cStat == 105 Tentar novamente mais tarde
      *
+     * @name   getProtocol
+     * @param  string   $recibo numero do recibo do envio do lote
+     * @param  string   $chave  numero da chave da CTe de 44 digitos
+     * @param  string   $tpAmb  numero do ambiente 1 - producao e 2 - homologação
+     * @return mixed    false ou array
+     */
+    public function getProtocol($recibo = '', $chave = '', $tpAmb = '')
+    {
+        // Carrega defaults
+        $i = 0;
+        $aRetorno = array('bStat' => false,'cStat' => '','xMotivo' => '','aProt' => '','aCanc'=>'');
+        $cUF = $this->cUF;
+        $UF = $this->UF;
+        if ($tpAmb != '1' && $tpAmb != '2') {
+            $tpAmb = '2';
+        }
+        $tpAmb = $this->tpAmb;
+        $aURL = $this->aURL;
+        // Verifica se a chave foi passada
+        $scan = '';
+        if ($chave != '') {
+            // Se sim extrair o cUF da chave
+            $cUF = substr($chave, 0, 2);
+            // Testar para ver se é o mesmo do emitente
+            if ($cUF != $this->cUF || $tpAmb != $this->tpAmb) {
+                // Se não for o mesmo carregar a sigla
+                $UF = $this->UFList[$cUF];
+                // Recarrega as url referentes aos dados passados como parametros para a função
+                $aURL = $this->loadSEFAZ($this->raizDir.'config'.DIRECTORY_SEPARATOR.$this->xmlURLfile, $tpAmb, $UF);
+            }
+            $scan = substr($chave, 34, 1);
+        }
+        //hambiente SCAN
+        if ($scan == 7 || $scan == 3) {
+            if ($cUF == 35) {
+                $aURL = $this->loadSEFAZ($this->raizDir.'config'.DIRECTORY_SEPARATOR.$this->xmlURLfile, $tpAmb, 'SVSP');
+            } else {
+                $aURL = $this->loadSEFAZ($this->raizDir.'config'.DIRECTORY_SEPARATOR.$this->xmlURLfile, $tpAmb, 'SVRS');
+            }
+        }
+        if ($recibo == '' && $chave == '') {
+            $this->errStatus = true;
+            $this->errMsg = 'ERRO. Favor indicar o numero do recibo ou a chave de acesso da CTe!!';
+            return false;
+        }
+        if ($recibo != '' && $chave != '') {
+            $this->errStatus = true;
+            $this->errMsg = 'ERRO. Favor indicar somente um dos dois dados ou o numero do '
+                    . 'recibo ou a chave de acesso da CTe!!';
+            return false;
+        }
+        // Consulta pelo recibo
+        if ($recibo != '' && $chave == '') {
+            // Buscar os protocolos pelo numero do recibo do lote
+            // Identificação do serviço
+            $servico = 'CteRetRecepcao';
+            // Recuperação da versão
+            $versao = $aURL[$servico]['version'];
+            // Recuperação da url do serviço
+            $urlservico = $aURL[$servico]['URL'];
+            // Recuperação do método
+            $metodo = $aURL[$servico]['method'];
+            // Montagem do namespace do serviço
+            $namespace = $this->URLPortal . '/wsdl/' . $servico;
+            // Montagem do cabeçalho da comunicação SOAP
+            $cabec = '<cteCabecMsg xmlns="'.$namespace.'"><cUF>'.$cUF.'</cUF><versaoDados>'
+                    . $versao . '</versaoDados></cteCabecMsg>';
+            // Montagem dos dados da mensagem SOAP
+            $dados = '<cteDadosMsg xmlns="'.$namespace.'"><consReciCTe xmlns="'.$this->URLPortal
+                    . '" versao="'.$versao.'"><tpAmb>'.$tpAmb.'</tpAmb><nRec>'.$recibo.'</nRec></consReciCTe>'
+                    . '</cteDadosMsg>';
+            // Nome do arquivo
+            $nomeArq = $recibo . '-protrec.xml';
+        }
+        // Consulta pela chave
+        if ($recibo == '' &&  $chave != '') {
+            // Buscar o protocolo pelo numero da chave de acesso
+            // Identificação do serviço
+            $servico = 'CteConsultaProtocolo';
+            // Recuperação da versão
+            $versao = $aURL[$servico]['version'];
+            // Recuperação da url do serviço
+            $urlservico = $aURL[$servico]['URL'];
+            // Recuperação do método
+            $metodo = $aURL[$servico]['method'];
+            // Montagem do namespace do serviço
+            $servico = 'CteConsulta';
+            $namespace = $this->URLPortal . '/wsdl/' . $servico;
+            // Montagem do cabeçalho da comunicação SOAP
+            $cabec = '<cteCabecMsg xmlns="'.$namespace.'"><cUF>'.$cUF.'</cUF><versaoDados>'
+                    . $versao . '</versaoDados></cteCabecMsg>';
+            // Montagem dos dados da mensagem SOAP
+            $dados = '<cteDadosMsg xmlns="'.$namespace.'"><consSitCTe xmlns="'.$this->URLPortal
+                    . '" versao="' . $versao . '"><tpAmb>' . $tpAmb . '</tpAmb><xServ>CONSULTAR</xServ><chCTe>'
+                    . $chave . '</chCTe></consSitCTe></cteDadosMsg>';
+        }
+        // Envia a solicitação via SOAP
+        $retorno = $this->zSendSOAP($urlservico, $namespace, $cabec, $dados, $metodo, $tpAmb);   
+        // Verifica o retorno
+        if ( empty($retorno) ) {
+            $this->errStatus = true;
+            $this->errMsg = 'Nao houve retorno Soap verifique a mensagem de erro e o debug!!';
+            return false;
+        }
+        // Tratar dados de retorno
+        $doc = new DOMDocument();
+        $doc->formatOutput = false;
+        $doc->preserveWhiteSpace = false;
+        $doc->loadXML($retorno, LIBXML_NOBLANKS | LIBXML_NOEMPTYTAG);
+        $cStat = $doc->getElementsByTagName('cStat')->item(0)->nodeValue;
+        if ( empty($cStat) ) {
+            $this->errStatus = true;
+            $this->errMsg = 'Não foi encontrado valor válido para cStat!!';
+            return false;
+        }
+        // O retorno vai variar se for buscado o protocolo ou recibo
+        // Retorno nda consulta pela Chave do CTe
+        // retConsSitCTe 100 aceita 110 denegada 101 cancelada ou outro recusada
+        // cStat xMotivo cUF chCTe protCTe retCancCTe
+        if ($chave != '') {
+            $aRetorno['bStat'] = true;
+            $aRetorno['cStat'] = $doc->getElementsByTagName('cStat')->item(0)->nodeValue;
+            $aRetorno['xMotivo'] = !empty($doc->getElementsByTagName('xMotivo')->item(0)->nodeValue) ?
+                    $doc->getElementsByTagName('xMotivo')->item(0)->nodeValue : '';
+            $infProt = $doc->getElementsByTagName('infProt')->item($i);
+            $infCanc = $doc->getElementsByTagName('infCanc')->item(0);
+            $aProt = '';
+            if (isset($infProt)) {
+                foreach ($infProt->childNodes as $t) {
+                    $aProt[$i][$t->nodeName] = $t->nodeValue;
+                }
+                $aProt['dhRecbto'] = !empty($aProt['dhRecbto']) ?
+                        date(
+                            "d/m/Y H:i:s",
+                            $this->zConvertTime($aProt['dhRecbto'])
+                        ) : '';
+            } else {
+                $aProt = '';
+            }
+            if (isset($infCanc)) {
+                foreach ($infCanc->childNodes as $t) {
+                    $aCanc[$t->nodeName] = $t->nodeValue;
+                }
+                $aCanc['dhRecbto'] = !empty($aCanc['dhRecbto']) ?
+                        date("d/m/Y H:i:s", $this->zConvertTime($aCanc['dhRecbto'])) : '';
+            } else {
+                $aCanc = '';
+            }
+            $aRetorno['aProt'] = $aProt;
+            $aRetorno['aCanc'] = $aCanc;
+            // Gravar o retorno na pasta temp apenas se a nota foi aprovada, cancelada ou denegada
+            if ($aRetorno['cStat'] == 100 || $aRetorno['cStat'] == 101 || $aRetorno['cStat'] == 110) {
+                // Nome do arquivo
+                $nomeArq = $chave . '-prot.xml';
+                $nome = $this->temDir . $nomeArq;
+                $nome = $doc->save($nome);
+            }
+        }
+        // Retorno da consulta pelo recibo
+        // CTeRetRecepcao 104 tem retornos
+        // nRec cStat xMotivo cUF cMsg xMsg protCte* infProt chCTe dhRecbto nProt cStat xMotivo
+        if ($recibo != '') {
+            $aRetorno['bStat'] = true;
+            // status do serviço
+            $aRetorno['cStat'] = $doc->getElementsByTagName('cStat')->item(0)->nodeValue;
+            // motivo da resposta (opcional)
+            if ( ! empty($doc->getElementsByTagName('xMotivo')->item(0)->nodeValue) ) {
+                $aRetorno['xMotivo'] = $doc->getElementsByTagName('xMotivo')->item(0)->nodeValue;
+            }
+            if ($cStat == '104') {
+                $aProt = '';
+                //aqui podem ter varios retornos dependendo do numero de CTe enviados no Lote e já processadas
+                $protCTe = $doc->getElementsByTagName('protCTe');
+                foreach ($protCTe as $d) {
+                    $infProt = $d->getElementsByTagName('infProt')->item(0);
+                    $protcStat = $infProt->getElementsByTagName('cStat')->item(0)->nodeValue;
+                    //pegar os dados do protolo para retornar
+                    foreach ($infProt->childNodes as $t) {
+                        $aProt[$i][$t->nodeName] = $t->nodeValue;
+                    }
+                    $i++; //incluido increment para controlador de indice do array
+                    //salvar o protocolo somente se a nota estiver approvada ou denegada
+                    if ($protcStat == 100 || $protcStat == 110) {
+                        $nomeprot = $this->temDir
+                            . $infProt->getElementsByTagName('chCTe')->item(0)->nodeValue.'-prot.xml';
+                        //salvar o protocolo em arquivo
+                        $novoprot = new DOMDocument('1.0', 'UTF-8');
+                        $novoprot->formatOutput = true;
+                        $novoprot->preserveWhiteSpace = false;
+                        $pCTe = $novoprot->createElement("protCTe");
+                        $pCTe->setAttribute("versao", "1.03");
+                        // Importa o node e todo o seu conteudo
+                        $node = $novoprot->importNode($infProt, true);
+                        // acrescenta ao node principal
+                        $pCTe->appendChild($node);
+                        $novoprot->appendChild($pCTe);
+                        $xml = $novoprot->saveXML();
+                        $xml = str_replace(
+                            '<?xml version="1.0" encoding="UTF-8  standalone="no"?>',
+                            '<?xml version="1.0" encoding="UTF-8"?>',
+                            $xml
+                        );
+                        $xml = str_replace(array("default:",":default","\n"), "", $xml);
+                        $xml = str_replace("  ", " ", $xml);
+                        $xml = str_replace("  ", " ", $xml);
+                        $xml = str_replace("  ", " ", $xml);
+                        $xml = str_replace("  ", " ", $xml);
+                        $xml = str_replace("  ", " ", $xml);
+                        $xml = str_replace("> <", "><", $xml);
+                        file_put_contents($nomeprot, $xml);
+                    }
+                }
+                // Atualiza o valor de aProt
+                $aRetorno['aProt'] = $aProt;
+            }
+            //passa o valor de $aProt para o array de retorno
+            $nomeArq = $recibo . '-recprot.xml';
+            $nome = $this->temDir . $nomeArq;
+            $nome = $doc->save($nome);
+        }
+        return $aRetorno;
+    }
+    /**
+     * zSendSOAP
+     * Função para estabelecer comunicaçao com servidor SOAP 1.2 da SEFAZ,
+     * usando as chaves publica e privada parametrizadas na contrução da classe.
+     * Depende de libcurl
+     *
+     * @name zSendSOAP
+     * @param string $urlsefaz
+     * @param string $namespace
+     * @param string $cabecalho
+     * @param string $dados
+     * @param string $metodo
+     * @param numeric $ambiente
+     * @return mixed false se houve falha ou o retorno em xml do SEFAZ
+     */
+    protected function zSendSOAP($urlsefaz, $namespace, $cabecalho, $dados, $metodo, $ambiente)
+    {
+        if ($urlsefaz == '') {
+            //não houve retorno
+            $this->errMsg = 'URL do webservice não disponível.';
+            $this->errStatus = true;
+        }
+        $data = '';
+        $data .= '<?xml version="1.0" encoding="utf-8"?>';
+        $data .= '<soap12:Envelope ';
+        $data .= 'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ';
+        $data .= 'xmlns:xsd="http://www.w3.org/2001/XMLSchema" ';
+        $data .= 'xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">';
+        $data .= '<soap12:Header>';
+        $data .= $cabecalho;
+        $data .= '</soap12:Header>';
+        $data .= '<soap12:Body>';
+        $data .= $dados;
+        $data .= '</soap12:Body>';
+        $data .= '</soap12:Envelope>';
+        //Tabela de codigos HTTP
+        $cCode['0']="Indefinido";
+        //[Informational 1xx]
+        $cCode['100']="Continue";
+        $cCode['101']="Switching Protocols";
+        //[Successful 2xx]
+        $cCode['200']="OK";
+        $cCode['201']="Created";
+        $cCode['202']="Accepted";
+        $cCode['203']="Non-Authoritative Information";
+        $cCode['204']="No Content";
+        $cCode['205']="Reset Content";
+        $cCode['206']="Partial Content";
+        //[Redirection 3xx]
+        $cCode['300']="Multiple Choices";
+        $cCode['301']="Moved Permanently";
+        $cCode['302']="Found";
+        $cCode['303']="See Other";
+        $cCode['304']="Not Modified";
+        $cCode['305']="Use Proxy";
+        $cCode['306']="(Unused)";
+        $cCode['307']="Temporary Redirect";
+        //[Client Error 4xx]
+        $cCode['400']="Bad Request";
+        $cCode['401']="Unauthorized";
+        $cCode['402']="Payment Required";
+        $cCode['403']="Forbidden";
+        $cCode['404']="Not Found";
+        $cCode['405']="Method Not Allowed";
+        $cCode['406']="Not Acceptable";
+        $cCode['407']="Proxy Authentication Required";
+        $cCode['408']="Request Timeout";
+        $cCode['409']="Conflict";
+        $cCode['410']="Gone";
+        $cCode['411']="Length Required";
+        $cCode['412']="Precondition Failed";
+        $cCode['413']="Request Entity Too Large";
+        $cCode['414']="Request-URI Too Long";
+        $cCode['415']="Unsupported Media Type";
+        $cCode['416']="Requested Range Not Satisfiable";
+        $cCode['417']="Expectation Failed";
+        //[Server Error 5xx]
+        $cCode['500']="Internal Server Error";
+        $cCode['501']="Not Implemented";
+        $cCode['502']="Bad Gateway";
+        $cCode['503']="Service Unavailable";
+        $cCode['504']="Gateway Timeout";
+        $cCode['505']="HTTP Version Not Supported";
+
+        $tamanho = strlen($data);
+        
+        $parametros = array(
+            'Content-Type: application/soap+xml;charset=utf-8;action="'.$namespace."/".$metodo.'"',
+            'SOAPAction: "'.$metodo.'"',
+            "Content-length: $tamanho");
+        $_aspa = '"';
+        $oCurl = curl_init();
+        if (is_array($this->aProxy)) {
+            curl_setopt($oCurl, CURLOPT_HTTPPROXYTUNNEL, 1);
+            curl_setopt($oCurl, CURLOPT_PROXYTYPE, "CURLPROXY_HTTP");
+            curl_setopt($oCurl, CURLOPT_PROXY, $this->aProxy['IP'].':'.$this->aProxy['PORT']);
+            if ($this->aProxy['PASS'] != '') {
+                curl_setopt($oCurl, CURLOPT_PROXYUSERPWD, $this->aProxy['USER'].':'.$this->aProxy['PASS']);
+                curl_setopt($oCurl, CURLOPT_PROXYAUTH, "CURLAUTH_BASIC");
+            } //fim if senha proxy
+        }//fim if aProxy
+
+        curl_setopt($oCurl, CURLOPT_URL, $urlsefaz.'');
+        curl_setopt($oCurl, CURLOPT_PORT, 443);
+        curl_setopt($oCurl, CURLOPT_VERBOSE, 1);
+        curl_setopt($oCurl, CURLOPT_HEADER, 1);
+        curl_setopt($oCurl, CURLOPT_SSLVERSION, 3);
+        curl_setopt($oCurl, CURLOPT_SSL_VERIFYHOST, 0);
+        curl_setopt($oCurl, CURLOPT_SSL_VERIFYPEER, 0);
+        curl_setopt($oCurl, CURLOPT_SSLCERT, $this->pubKEY);
+        curl_setopt($oCurl, CURLOPT_SSLKEY, $this->priKEY);
+        curl_setopt($oCurl, CURLOPT_POST, 1);
+        curl_setopt($oCurl, CURLOPT_POSTFIELDS, $data);
+        curl_setopt($oCurl, CURLOPT_RETURNTRANSFER, 1);
+        curl_setopt($oCurl, CURLOPT_HTTPHEADER, $parametros);
+        $__xml = curl_exec($oCurl);
+        $info = curl_getinfo($oCurl);
+        $txtInfo ="";
+        $txtInfo .= "URL=$info[url]\n";
+        $txtInfo .= "Content type=$info[content_type]\n";
+        $txtInfo .= "Http Code=$info[http_code]\n";
+        $txtInfo .= "Header Size=$info[header_size]\n";
+        $txtInfo .= "Request Size=$info[request_size]\n";
+        $txtInfo .= "Filetime=$info[filetime]\n";
+        $txtInfo .= "SSL Verify Result=$info[ssl_verify_result]\n";
+        $txtInfo .= "Redirect Count=$info[redirect_count]\n";
+        $txtInfo .= "Total Time=$info[total_time]\n";
+        $txtInfo .= "Namelookup=$info[namelookup_time]\n";
+        $txtInfo .= "Connect Time=$info[connect_time]\n";
+        $txtInfo .= "Pretransfer Time=$info[pretransfer_time]\n";
+        $txtInfo .= "Size Upload=$info[size_upload]\n";
+        $txtInfo .= "Size Download=$info[size_download]\n";
+        $txtInfo .= "Speed Download=$info[speed_download]\n";
+        $txtInfo .= "Speed Upload=$info[speed_upload]\n";
+        $txtInfo .= "Download Content Length=$info[download_content_length]\n";
+        $txtInfo .= "Upload Content Length=$info[upload_content_length]\n";
+        $txtInfo .= "Start Transfer Time=$info[starttransfer_time]\n";
+        $txtInfo .= "Redirect Time=$info[redirect_time]\n";
+        $n = strlen($__xml);
+        $x = stripos($__xml, "<");
+        $xml = substr($__xml, $x, $n-$x);
+        $this->soapDebug = $data."\n\n".$txtInfo."\n".$__xml;
+        if ($__xml === false) {
+            //não houve retorno
+            $this->errMsg = curl_error($oCurl) . $info['http_code'] . $cCode[$info['http_code']];
+            $this->errStatus = true;
+        } else {
+            //houve retorno mas ainda pode ser uma mensagem de erro do webservice
+            $this->errMsg = $info['http_code'] . ' ' . $cCode[$info['http_code']];
+            $this->errStatus = false;
+        }
+        curl_close($oCurl);
+        return $xml;
+    }
+
+    /**
+     * zConvertTime
+     * Converte o campo data time retornado pelo webservice
+     * em um timestamp unix
+     *
+     * @name zConvertTime
+     * @param    string   $DH
+     * @return   timestamp
+     * @access   private
+     */
+    protected function zConvertTime($DH)
+    {
+        if ($DH) {
+            $aDH = explode('T', $DH);
+            $adDH = explode('-', $aDH[0]);
+            $atDH = explode(':', $aDH[1]);
+            $timestampDH = mktime($atDH[0], $atDH[1], $atDH[2], $adDH[1], $adDH[2], $adDH[0]);
+            return $timestampDH;
+        }
+    }
+    /**
+     * getProtocol
+     * Solicita resposta do lote de Conhecimentos de Transporte ou o protocolo de
+     * autorização da CTe$tpAmb = $this->tpAmb;
+     * Caso $this->cStat == 105 Tentar novamente mais tarde
+     *
      * @name getProtocol
      * @param    string   $recibo numero do recibo do envio do lote
      * @param    string   $chave  numero da chave da CTe de 44 digitos
@@ -1650,7 +2053,7 @@ class CTeNFePHP {
      * @param   integer   $modSOAP 1 usa __sendSOAP e 2 usa __sendSOAP2
      * @return    mixed     false ou array
     **/
-    public function getProtocol($recibo = '', $chave = '', $tpAmb = '', $modSOAP = '2') {
+    public function getProtocolVelho($recibo = '', $chave = '', $tpAmb = '', $modSOAP = '2') {
         // Carrega defaults
         $i = 0;
         $aRetorno = array('bStat' => false,'cStat' => '','xMotivo' => '','aProt' => '','aCanc'=>'');
@@ -3145,12 +3548,12 @@ class CTeNFePHP {
  */
 if(class_exists("SoapClient")){
     class CTeSOAP2Client extends SoapClient {
-        function __doRequest($request, $location, $action, $version) {
+        function __doRequest($request, $location, $action, $version, $one_way = NULL) {
         $request = str_replace(':ns1', '', $request);
         $request = str_replace('ns1:', '', $request);
         $request = str_replace("\n", '', $request);
         $request = str_replace("\r", '', $request);
-        return parent::__doRequest($request, $location, $action, $version);
+        return parent::__doRequest($request, $location, $action, $version, $one_way);
         }
     } // Fim CTeSOAP2Client
 }
